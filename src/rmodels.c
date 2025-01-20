@@ -191,6 +191,21 @@ void DrawPoint3D(Vector3 position, Color color)
     rlEnd();
 }
 
+// Draw an arbitrary number of points
+void DrawPoints3D(const Vector3 *points, int pointCount, Color color)
+{
+    if (pointCount < 1) return; // Security check
+
+    rlBegin(RL_POINTS);
+        rlColor4ub(color.r, color.g, color.b, color.a);
+
+        for (int i = 0; i < pointCount; i++)
+        {
+            rlVertex3f(points[i].x, points[i].y, points[i].z);
+        }
+    rlEnd();
+}
+
 // Draw a circle in 3D world space
 void DrawCircle3D(Vector3 center, float radius, Vector3 rotationAxis, float rotationAngle, Color color)
 {
