@@ -266,6 +266,7 @@
 #define RL_TEXTURE                              0x1702      // GL_TEXTURE
 
 // Primitive assembly draw modes
+#define RL_POINTS                               0x0000      // GL_POINTS
 #define RL_LINES                                0x0001      // GL_LINES
 #define RL_TRIANGLES                            0x0004      // GL_TRIANGLES
 #define RL_QUADS                                0x0007      // GL_QUADS
@@ -1434,6 +1435,7 @@ void rlBegin(int mode)
 {
     switch (mode)
     {
+        case RL_POINTS: glBegin(GL_POINTS); break;
         case RL_LINES: glBegin(GL_LINES); break;
         case RL_TRIANGLES: glBegin(GL_TRIANGLES); break;
         case RL_QUADS: glBegin(GL_QUADS); break;
@@ -1455,8 +1457,8 @@ void rlColor4f(float x, float y, float z, float w) { glColor4f(x, y, z, w); }
 // Initialize drawing mode (how to organize vertex)
 void rlBegin(int mode)
 {
-    // Draw mode can be RL_LINES, RL_TRIANGLES and RL_QUADS
-    // NOTE: In all three cases, vertex are accumulated over default internal vertex buffer
+    // Draw mode can be RL_POINTS, RL_LINES, RL_TRIANGLES and RL_QUADS
+    // NOTE: In all four cases, vertex are accumulated over default internal vertex buffer
     if (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].mode != mode)
     {
         if (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount > 0)
@@ -1466,9 +1468,7 @@ void rlBegin(int mode)
             // It implies adding some extra alignment vertex at the end of the draw,
             // those vertex are not processed but they are considered as an additional offset
             // for the next set of vertex to be drawn
-            if (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].mode == RL_LINES) RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexAlignment = ((RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount < 4)? RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount : RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount%4);
-            else if (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].mode == RL_TRIANGLES) RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexAlignment = ((RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount < 4)? 1 : (4 - (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount%4)));
-            else RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexAlignment = 0;
+            RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexAlignment = (- RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount) & 3;
 
             if (!rlCheckRenderBatchLimit(RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexAlignment))
             {
@@ -1515,23 +1515,21 @@ void rlVertex3f(float x, float y, float z)
     // We must check current draw.mode when a new vertex is required and finish the batch only if the draw.mode draw.vertexCount is %2, %3 or %4
     if (RLGL.State.vertexCounter > (RLGL.currentBatch->vertexBuffer[RLGL.currentBatch->currentBuffer].elementCount*4 - 4))
     {
-        if ((RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].mode == RL_LINES) &&
-            (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount%2 == 0))
+        int n = 0;
+        switch(RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].mode)
         {
-            // Reached the maximum number of vertices for RL_LINES drawing
+            case RL_POINTS:     n = 1;  break;
+            case RL_LINES:      n = 2;  break;
+            case RL_TRIANGLES:  n = 3;  break;
+            case RL_QUADS:      n = 4;  break;
+        }
+
+        if (n && (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount%n == 0))
+        {
+            // Reached the maximum number of vertices for primitive drawing
             // Launch a draw call but keep current state for next vertices comming
             // NOTE: We add +1 vertex to the check for security
-            rlCheckRenderBatchLimit(2 + 1);
-        }
-        else if ((RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].mode == RL_TRIANGLES) &&
-            (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount%3 == 0))
-        {
-            rlCheckRenderBatchLimit(3 + 1);
-        }
-        else if ((RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].mode == RL_QUADS) &&
-            (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount%4 == 0))
-        {
-            rlCheckRenderBatchLimit(4 + 1);
+            rlCheckRenderBatchLimit(n + 1);
         }
     }
 
@@ -1662,9 +1660,7 @@ void rlSetTexture(unsigned int id)
                 // It implies adding some extra alignment vertex at the end of the draw,
                 // those vertex are not processed but they are considered as an additional offset
                 // for the next set of vertex to be drawn
-                if (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].mode == RL_LINES) RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexAlignment = ((RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount < 4)? RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount : RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount%4);
-                else if (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].mode == RL_TRIANGLES) RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexAlignment = ((RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount < 4)? 1 : (4 - (RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount%4)));
-                else RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexAlignment = 0;
+                RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexAlignment = (- RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexCount) & 3;
 
                 if (!rlCheckRenderBatchLimit(RLGL.currentBatch->draws[RLGL.currentBatch->drawCounter - 1].vertexAlignment))
                 {
@@ -3058,7 +3054,7 @@ void rlDrawRenderBatch(rlRenderBatch *batch)
                 // Bind current draw call texture, activated as GL_TEXTURE0 and Bound to sampler2D texture0 by default
                 glBindTexture(GL_TEXTURE_2D, batch->draws[i].textureId);
 
-                if ((batch->draws[i].mode == RL_LINES) || (batch->draws[i].mode == RL_TRIANGLES)) glDrawArrays(batch->draws[i].mode, vertexOffset, batch->draws[i].vertexCount);
+                if ((batch->draws[i].mode == RL_POINTS) || (batch->draws[i].mode == RL_LINES) || (batch->draws[i].mode == RL_TRIANGLES)) glDrawArrays(batch->draws[i].mode, vertexOffset, batch->draws[i].vertexCount);
                 else
                 {
     #if defined(GRAPHICS_API_OPENGL_33)
