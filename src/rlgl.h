@@ -154,7 +154,8 @@
     !defined(GRAPHICS_API_OPENGL_33) && \
     !defined(GRAPHICS_API_OPENGL_43) && \
     !defined(GRAPHICS_API_OPENGL_ES2) && \
-    !defined(GRAPHICS_API_OPENGL_ES3)
+    !defined(GRAPHICS_API_OPENGL_ES3) && \
+    !defined(GRAPHICS_API_OPENGL_ES31)
         #define GRAPHICS_API_OPENGL_33
 #endif
 
@@ -183,6 +184,11 @@
 // OpenGL 4.3 uses OpenGL 3.3 Core functionality
 #if defined(GRAPHICS_API_OPENGL_43)
     #define GRAPHICS_API_OPENGL_33
+#endif
+
+// OpenGL ES 3.1 uses OpenGL ES 3.0 functionality (and more)
+#if defined(GRAPHICS_API_OPENGL_ES31)
+    #define GRAPHICS_API_OPENGL_ES3
 #endif
 
 // OpenGL ES 3.0 uses OpenGL ES 2.0 functionality (and more)
@@ -433,7 +439,8 @@ typedef enum {
     RL_OPENGL_33,               // OpenGL 3.3 (GLSL 330)
     RL_OPENGL_43,               // OpenGL 4.3 (using GLSL 330)
     RL_OPENGL_ES_20,            // OpenGL ES 2.0 (GLSL 100)
-    RL_OPENGL_ES_30             // OpenGL ES 3.0 (GLSL 300 es)
+    RL_OPENGL_ES_30,            // OpenGL ES 3.0 (GLSL 300 es)
+    RL_OPENGL_ES_31             // OpenGL ES 3.1 (GLSL 310 es)
 } rlGlVersion;
 
 // Trace log level
@@ -863,7 +870,11 @@ RLAPI void rlLoadDrawQuad(void);     // Load and draw a quad
     #include "external/glad.h"          // GLAD extensions loading library, includes OpenGL headers
 #endif
 
-#if defined(GRAPHICS_API_OPENGL_ES3)
+#if defined(GRAPHICS_API_OPENGL_ES31)
+    #include <GLES3/gl31.h>              // OpenGL ES 3.0 library
+    #define GL_GLEXT_PROTOTYPES
+    #include <GLES2/gl2ext.h>           // OpenGL ES 2.0 extensions library
+#elif defined(GRAPHICS_API_OPENGL_ES3)
     #include <GLES3/gl3.h>              // OpenGL ES 3.0 library
     #define GL_GLEXT_PROTOTYPES
     #include <GLES2/gl2ext.h>           // OpenGL ES 2.0 extensions library
@@ -2639,7 +2650,9 @@ int rlGetVersion(void)
 #elif defined(GRAPHICS_API_OPENGL_33)
     glVersion = RL_OPENGL_33;
 #endif
-#if defined(GRAPHICS_API_OPENGL_ES3)
+#if defined(GRAPHICS_API_OPENGL_ES31)
+    glVersion = RL_OPENGL_ES_31;
+#elif defined(GRAPHICS_API_OPENGL_ES3)
     glVersion = RL_OPENGL_ES_30;
 #elif defined(GRAPHICS_API_OPENGL_ES2)
     glVersion = RL_OPENGL_ES_20;
@@ -2979,7 +2992,10 @@ void rlDrawRenderBatch(rlRenderBatch *batch)
 
             // Create modelview-projection matrix and upload to shader
             Matrix matMVP = rlMatrixMultiply(RLGL.State.modelview, RLGL.State.projection);
-            glUniformMatrix4fv(RLGL.State.currentShaderLocs[RL_SHADER_LOC_MATRIX_MVP], 1, false, rlMatrixToFloat(matMVP));
+            if (RLGL.State.currentShaderLocs[RL_SHADER_LOC_MATRIX_MVP] != -1)
+            {
+                glUniformMatrix4fv(RLGL.State.currentShaderLocs[RL_SHADER_LOC_MATRIX_MVP], 1, false, rlMatrixToFloat(matMVP));
+            }
 
             if (RLGL.State.currentShaderLocs[RL_SHADER_LOC_MATRIX_PROJECTION] != -1)
             {
@@ -3031,8 +3047,14 @@ void rlDrawRenderBatch(rlRenderBatch *batch)
             }
 
             // Setup some default shader values
-            glUniform4f(RLGL.State.currentShaderLocs[RL_SHADER_LOC_COLOR_DIFFUSE], 1.0f, 1.0f, 1.0f, 1.0f);
-            glUniform1i(RLGL.State.currentShaderLocs[RL_SHADER_LOC_MAP_DIFFUSE], 0);  // Active default sampler2D: texture0
+            if(RLGL.State.currentShaderLocs[RL_SHADER_LOC_COLOR_DIFFUSE] != -1)
+            {
+                glUniform4f(RLGL.State.currentShaderLocs[RL_SHADER_LOC_COLOR_DIFFUSE], 1.0f, 1.0f, 1.0f, 1.0f);
+            }
+            if(RLGL.State.currentShaderLocs[RL_SHADER_LOC_MAP_DIFFUSE] != -1)
+            {
+                glUniform1i(RLGL.State.currentShaderLocs[RL_SHADER_LOC_MAP_DIFFUSE], 0);  // Active default sampler2D: texture0
+            }
 
             // Activate additional sampler textures
             // Those additional textures will be common for all draw calls of the batch
@@ -4161,10 +4183,10 @@ unsigned int rlCompileShader(const char *shaderCode, int type)
             case GL_VERTEX_SHADER: TRACELOG(RL_LOG_WARNING, "SHADER: [ID %i] Failed to compile vertex shader code", shader); break;
             case GL_FRAGMENT_SHADER: TRACELOG(RL_LOG_WARNING, "SHADER: [ID %i] Failed to compile fragment shader code", shader); break;
             //case GL_GEOMETRY_SHADER:
-        #if defined(GRAPHICS_API_OPENGL_43)
+        #if defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
             case GL_COMPUTE_SHADER: TRACELOG(RL_LOG_WARNING, "SHADER: [ID %i] Failed to compile compute shader code", shader); break;
-        #elif defined(GRAPHICS_API_OPENGL_33)
-            case GL_COMPUTE_SHADER: TRACELOG(RL_LOG_WARNING, "SHADER: Compute shaders not enabled. Define GRAPHICS_API_OPENGL_43", shader); break;
+        #elif defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
+            case GL_COMPUTE_SHADER: TRACELOG(RL_LOG_WARNING, "SHADER: Compute shaders not enabled. Define GRAPHICS_API_OPENGL_43 or GRAPHICS_API_OPENGL_ES31", shader); break;
         #endif
             default: break;
         }
@@ -4190,10 +4212,10 @@ unsigned int rlCompileShader(const char *shaderCode, int type)
             case GL_VERTEX_SHADER: TRACELOG(RL_LOG_INFO, "SHADER: [ID %i] Vertex shader compiled successfully", shader); break;
             case GL_FRAGMENT_SHADER: TRACELOG(RL_LOG_INFO, "SHADER: [ID %i] Fragment shader compiled successfully", shader); break;
             //case GL_GEOMETRY_SHADER:
-        #if defined(GRAPHICS_API_OPENGL_43)
+        #if defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
             case GL_COMPUTE_SHADER: TRACELOG(RL_LOG_INFO, "SHADER: [ID %i] Compute shader compiled successfully", shader); break;
-        #elif defined(GRAPHICS_API_OPENGL_33)
-            case GL_COMPUTE_SHADER: TRACELOG(RL_LOG_WARNING, "SHADER: Compute shaders not enabled. Define GRAPHICS_API_OPENGL_43", shader); break;
+        #elif defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
+            case GL_COMPUTE_SHADER: TRACELOG(RL_LOG_WARNING, "SHADER: Compute shaders not enabled. Define GRAPHICS_API_OPENGL_43 or GRAPHICS_API_OPENGL_ES31", shader); break;
         #endif
             default: break;
         }
@@ -4421,7 +4443,7 @@ unsigned int rlLoadComputeShaderProgram(unsigned int shaderId)
 {
     unsigned int program = 0;
 
-#if defined(GRAPHICS_API_OPENGL_43)
+#if defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
     GLint success = 0;
     program = glCreateProgram();
     glAttachShader(program, shaderId);
@@ -4461,7 +4483,7 @@ unsigned int rlLoadComputeShaderProgram(unsigned int shaderId)
         TRACELOG(RL_LOG_INFO, "SHADER: [ID %i] Compute shader program loaded successfully", program);
     }
 #else
-    TRACELOG(RL_LOG_WARNING, "SHADER: Compute shaders not enabled. Define GRAPHICS_API_OPENGL_43");
+    TRACELOG(RL_LOG_WARNING, "SHADER: Compute shaders not enabled. Define GRAPHICS_API_OPENGL_43 or GRAPHICS_API_OPENGL_ES31");
 #endif
 
     return program;
@@ -4470,7 +4492,7 @@ unsigned int rlLoadComputeShaderProgram(unsigned int shaderId)
 // Dispatch compute shader (equivalent to *draw* for graphics pilepine)
 void rlComputeShaderDispatch(unsigned int groupX, unsigned int groupY, unsigned int groupZ)
 {
-#if defined(GRAPHICS_API_OPENGL_43)
+#if defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
     glDispatchCompute(groupX, groupY, groupZ);
 #endif
 }
@@ -4480,14 +4502,16 @@ unsigned int rlLoadShaderBuffer(unsigned int size, const void *data, int usageHi
 {
     unsigned int ssbo = 0;
 
-#if defined(GRAPHICS_API_OPENGL_43)
+#if defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
     glGenBuffers(1, &ssbo);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
     glBufferData(GL_SHADER_STORAGE_BUFFER, size, data, usageHint? usageHint : RL_STREAM_COPY);
+#if defined(GRAPHICS_API_OPENGL_43)
     if (data == NULL) glClearBufferData(GL_SHADER_STORAGE_BUFFER, GL_R8UI, GL_RED_INTEGER, GL_UNSIGNED_BYTE, NULL);    // Clear buffer data to 0
+#endif
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 #else
-    TRACELOG(RL_LOG_WARNING, "SSBO: SSBO not enabled. Define GRAPHICS_API_OPENGL_43");
+    TRACELOG(RL_LOG_WARNING, "SSBO: SSBO not enabled. Define GRAPHICS_API_OPENGL_43 or GRAPHICS_API_OPENGL_ES31");
 #endif
 
     return ssbo;
@@ -4496,10 +4520,10 @@ unsigned int rlLoadShaderBuffer(unsigned int size, const void *data, int usageHi
 // Unload shader storage buffer object (SSBO)
 void rlUnloadShaderBuffer(unsigned int ssboId)
 {
-#if defined(GRAPHICS_API_OPENGL_43)
+#if defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
     glDeleteBuffers(1, &ssboId);
 #else
-    TRACELOG(RL_LOG_WARNING, "SSBO: SSBO not enabled. Define GRAPHICS_API_OPENGL_43");
+    TRACELOG(RL_LOG_WARNING, "SSBO: SSBO not enabled. Define GRAPHICS_API_OPENGL_43 or GRAPHICS_API_OPENGL_ES31");
 #endif
 
 }
@@ -4507,7 +4531,7 @@ void rlUnloadShaderBuffer(unsigned int ssboId)
 // Update SSBO buffer data
 void rlUpdateShaderBuffer(unsigned int id, const void *data, unsigned int dataSize, unsigned int offset)
 {
-#if defined(GRAPHICS_API_OPENGL_43)
+#if defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, id);
     glBufferSubData(GL_SHADER_STORAGE_BUFFER, offset, dataSize, data);
 #endif
@@ -4516,7 +4540,7 @@ void rlUpdateShaderBuffer(unsigned int id, const void *data, unsigned int dataSi
 // Get SSBO buffer size
 unsigned int rlGetShaderBufferSize(unsigned int id)
 {
-#if defined(GRAPHICS_API_OPENGL_43)
+#if defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
     GLint64 size = 0;
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, id);
     glGetBufferParameteri64v(GL_SHADER_STORAGE_BUFFER, GL_BUFFER_SIZE, &size);
@@ -4538,7 +4562,7 @@ void rlReadShaderBuffer(unsigned int id, void *dest, unsigned int count, unsigne
 // Bind SSBO buffer
 void rlBindShaderBuffer(unsigned int id, unsigned int index)
 {
-#if defined(GRAPHICS_API_OPENGL_43)
+#if defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, index, id);
 #endif
 }
@@ -4546,7 +4570,7 @@ void rlBindShaderBuffer(unsigned int id, unsigned int index)
 // Copy SSBO buffer data
 void rlCopyShaderBuffer(unsigned int destId, unsigned int srcId, unsigned int destOffset, unsigned int srcOffset, unsigned int count)
 {
-#if defined(GRAPHICS_API_OPENGL_43)
+#if defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
     glBindBuffer(GL_COPY_READ_BUFFER, srcId);
     glBindBuffer(GL_COPY_WRITE_BUFFER, destId);
     glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, srcOffset, destOffset, count);
@@ -4556,13 +4580,13 @@ void rlCopyShaderBuffer(unsigned int destId, unsigned int srcId, unsigned int de
 // Bind image texture
 void rlBindImageTexture(unsigned int id, unsigned int index, int format, bool readonly)
 {
-#if defined(GRAPHICS_API_OPENGL_43)
+#if defined(GRAPHICS_API_OPENGL_43) || defined(GRAPHICS_API_OPENGL_ES31)
     unsigned int glInternalFormat = 0, glFormat = 0, glType = 0;
 
     rlGetGlTextureFormats(format, &glInternalFormat, &glFormat, &glType);
     glBindImageTexture(index, id, 0, 0, 0, readonly? GL_READ_ONLY : GL_READ_WRITE, glInternalFormat);
 #else
-    TRACELOG(RL_LOG_WARNING, "TEXTURE: Image texture binding not enabled. Define GRAPHICS_API_OPENGL_43");
+    TRACELOG(RL_LOG_WARNING, "TEXTURE: Image texture binding not enabled. Define GRAPHICS_API_OPENGL_43 or GRAPHICS_API_OPENGL_ES31");
 #endif
 }
 
@@ -4878,7 +4902,15 @@ static void rlLoadShaderDefault(void)
     "out vec4 fragColor;                \n"
 #endif
 
-#if defined(GRAPHICS_API_OPENGL_ES3)
+#if defined(GRAPHICS_API_OPENGL_ES31)
+    "#version 310 es                    \n"
+    "precision mediump float;           \n"     // Precision required for OpenGL ES3.1 (WebGL 2) (on some browsers)
+    "in vec3 vertexPosition;            \n"
+    "in vec2 vertexTexCoord;            \n"
+    "in vec4 vertexColor;               \n"
+    "out vec2 fragTexCoord;             \n"
+    "out vec4 fragColor;                \n"
+#elif defined(GRAPHICS_API_OPENGL_ES3)
     "#version 300 es                    \n"
     "precision mediump float;           \n"     // Precision required for OpenGL ES3 (WebGL 2) (on some browsers)
     "in vec3 vertexPosition;            \n"
@@ -4931,7 +4963,20 @@ static void rlLoadShaderDefault(void)
     "}                                  \n";
 #endif
 
-#if defined(GRAPHICS_API_OPENGL_ES3)
+#if defined(GRAPHICS_API_OPENGL_ES31)
+    "#version 310 es                    \n"
+    "precision mediump float;           \n"     // Precision required for OpenGL ES3.1 (WebGL 2)
+    "in vec2 fragTexCoord;              \n"
+    "in vec4 fragColor;                 \n"
+    "out vec4 finalColor;               \n"
+    "uniform sampler2D texture0;        \n"
+    "uniform vec4 colDiffuse;           \n"
+    "void main()                        \n"
+    "{                                  \n"
+    "    vec4 texelColor = texture(texture0, fragTexCoord);   \n"
+    "    finalColor = texelColor*colDiffuse*fragColor;        \n"
+    "}                                  \n";
+#elif defined(GRAPHICS_API_OPENGL_ES3)
     "#version 300 es                    \n"
     "precision mediump float;           \n"     // Precision required for OpenGL ES3 (WebGL 2)
     "in vec2 fragTexCoord;              \n"
