@@ -23,6 +23,12 @@
 
 #include <stdlib.h>
 
+#if defined(GRAPHICS_API_OPENGL_43)
+    #define GLSL_VERSION            430
+#else // GRAPHICS_API_OPENGL_ES31
+    #define GLSL_VERSION            310
+#endif
+
 // IMPORTANT: This must match gol*.glsl GOL_WIDTH constant.
 // This must be a multiple of 16 (check golLogic compute dispatch).
 #define GOL_WIDTH 768
@@ -57,17 +63,17 @@ int main(void)
     unsigned int brushSize = 8;
 
     // Game of Life logic compute shader
-    char *golLogicCode = LoadFileText("resources/shaders/glsl430/gol.glsl");
+    char *golLogicCode = LoadFileText(TextFormat("resources/shaders/glsl%i/gol.glsl", GLSL_VERSION));
     unsigned int golLogicShader = rlCompileShader(golLogicCode, RL_COMPUTE_SHADER);
     unsigned int golLogicProgram = rlLoadComputeShaderProgram(golLogicShader);
     UnloadFileText(golLogicCode);
 
     // Game of Life logic render shader
-    Shader golRenderShader = LoadShader(NULL, "resources/shaders/glsl430/gol_render.glsl");
+    Shader golRenderShader = LoadShader(NULL, TextFormat("resources/shaders/glsl%i/gol_render.glsl", GLSL_VERSION));
     int resUniformLoc = GetShaderLocation(golRenderShader, "resolution");
 
     // Game of Life transfert shader (CPU<->GPU download and upload)
-    char *golTransfertCode = LoadFileText("resources/shaders/glsl430/gol_transfert.glsl");
+    char *golTransfertCode = LoadFileText(TextFormat("resources/shaders/glsl%i/gol_transfert.glsl", GLSL_VERSION));
     unsigned int golTransfertShader = rlCompileShader(golTransfertCode, RL_COMPUTE_SHADER);
     unsigned int golTransfertProgram = rlLoadComputeShaderProgram(golTransfertShader);
     UnloadFileText(golTransfertCode);
